@@ -69,7 +69,6 @@ pub fn get_update() -> Vec<String> {
 
     if minors[0] > minors[1] && majors[0] >= majors[1] {
         new_ver = 2;
-        new_ver = 2;
         versioning.push(true);
     } else {
         versioning.push(false);
