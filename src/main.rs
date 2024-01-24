@@ -42,6 +42,7 @@ fn version_args(args: &Args) {
     }
 }
 
+#[cfg(not(test))]
 fn main() {
 
     let args = Args::parse();
