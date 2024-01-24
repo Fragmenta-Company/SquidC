@@ -4,7 +4,11 @@ use clap::Parser;
 #[derive(Parser, Debug)]
 #[command(author, about, long_about = None)]
 pub struct Args {
-    /// Optimizations used in the compiler
+    /// Bundle VM executable with compiled bytecode *make executable*
+    #[arg(long, short)]
+    pub bundle: bool,
+
+    /// Number of optimization steps
     #[arg(long, short)]
     pub optimizations: Option<u8>,
 
