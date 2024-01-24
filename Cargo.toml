@@ -1,0 +1,12 @@
+[package]
+name = "squidc"
+version = "0.1.0"
+edition = "2021"
+repository = "https://github.com/Fragmenta-Company/SquidC"
+authors = ["Nicolas Renan Machado Dias", "Fragmenta Company"]
+description = "SquidC is a compiler for the Squid programming language for the SquidVM bytecode."
+documentation = "https://squidcdocs.fragmenta.org"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
