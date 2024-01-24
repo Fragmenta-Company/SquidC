@@ -1,6 +1,6 @@
 [package]
 name = "squidc"
-version = "0.1.0"
+version = "0.1.0-alpha"
 edition = "2021"
 repository = "https://github.com/Fragmenta-Company/SquidC"
 authors = ["Nicolas Renan Machado Dias", "Fragmenta Company"]
@@ -10,3 +10,10 @@ documentation = "https://squidcdocs.fragmenta.org"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+byteorder = { version = "1.5" }
+simple_logger = { version = "4.3" }
+log = { version = "0.4" }
+clap = { version = "4", features = ["derive"] }
+zip = { version = "0.6" }
+minreq = { version = "2.11", features = ["json-using-serde", "https"] }
+serde_json = { version = "1.0" }
