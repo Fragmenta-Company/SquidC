@@ -1,11 +1,11 @@
-use std::process;
 use crate::argsdef::Args;
 use clap::Parser;
+use std::process;
 
 mod argsdef;
 mod compiler_internals;
-mod getup;
 mod errdef;
+mod getup;
 
 #[macro_use]
 mod macrodefs;
@@ -16,7 +16,6 @@ const VM_NAMING_CONVENTION: &str = "Squid Compiler";
 /// Contains tools for checking updates, getting current version and others.
 #[cfg(not(test))]
 fn version_args(args: &Args) {
-
     if args.check_updates {
         println!("Current version: {}", env!("CARGO_PKG_VERSION"));
 
@@ -44,6 +43,7 @@ fn version_args(args: &Args) {
 
 #[cfg(not(test))]
 fn main() {
+    compiler_internals::tokenizer::test();
 
     let args = Args::parse();
 
