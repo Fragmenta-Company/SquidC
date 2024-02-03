@@ -1,16 +1,22 @@
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Keywords {
     Let,
     Const,
     Print,
     Loop,
     While,
+    For,
     Function,
+    If,
+    Main,
+    New,
+    Import,
+    StandardLibrary,
 }
 
 use Keywords::*;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Operators {
     /// Adding operator '+'
     Add,
@@ -32,8 +38,11 @@ pub enum Operators {
 
 use Operators::*;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Types {
+
+    /// Bool type (false | true)
+    Bool,
     /// Integer type (i64)
     ///
     /// Example: -32 | 32 | 64 | -64
@@ -68,11 +77,15 @@ pub enum Types {
     Object,
 
     Unit,
+
+    ThreadHandle,
+
+    TaskHandle,
 }
 
 use Types::*;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Delimiter {
     /// End Line ';'
     Semicolon,
@@ -102,42 +115,84 @@ pub enum Delimiter {
     OpenTypeParams,
 
     CloseTypeParams,
+
+    /// The object separator, for getting values and calling methods '.'
+    ObjectSeparator,
+
+    ImportSeparator,
 }
 
 use Delimiter::*;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Token {
     Keyword(Keywords),
     Types(Types),
     Operator(Operators),
     Delimiter(Delimiter),
     Identifier(String),
-    Literal(String),
+    LiteralString(String),
     LiteralInteger(i64),
     LiteralUInteger(u64),
     LiteralFloat(f64),
 }
 
 pub fn test() {
+    // let code = r#"
+    // fn main() -> Result<(), str> {
+    //     let [int] x = [2, 3, 4, 2];
+    //     let int y = 2;
+    //     let [bool] z;
+    //
+    //     x.for_each((a) => {
+    //         print(a);
+    //
+    //         let bool result = y == a;
+    //
+    //         if result {
+    //             z.push(result);
+    //         }
+    //     });
+    //
+    //     print("Right combination: {}", z);
+    //
+    // }
+    //
+    // "#
+    // .to_string();
+
     let code = r#"
-    fn function() -> Result<(), str> {
-        const int INTEGER = 12;
-        let str string = " Aloha + \" Chicago \" ";
-        let str x = 10;
-        let int y = 20;
-        let int z = 30.30;
-        print(x + 10);
+
+    import std::{ thread, ThreadError, ThreadHandle };
+    import std::process;
+
+    fn main() {
+
+        let int z = 10;
+
+        let Result<ThreadHandle, ThreadError> myThread = new thread(add_ten(z));
+
+        let int output = match myThread.handle() {
+            Ok(integer) => integer,
+            Err(error) => {
+                print("An error has occured when spawning a thread: {error}");
+                process.exit(1);
+            }
+        };
+
+        print("${output}");
+
     }
 
-    fn function2() {
+    fn add_ten(int y) -> int {
 
-        const str STRINGERSON = "GEE GEE GEE GEE GEE";
-        print(STRINGERSON);
+        let int x = y + 10;
+
+        x
 
     }
-    "#
-    .to_string();
+
+    "#.to_string();
 
     tokenize(code);
 }
@@ -154,11 +209,13 @@ pub fn tokenize(code: String) -> Vec<Token> {
 
     let mut inside_type_params = false;
 
+    let mut counter = 0;
+
     for c in code.chars() {
         if inside_string {
             if c == '"' && !buffer.ends_with('\\') {
                 inside_string = !inside_string;
-                tokens.push(Token::Literal(buffer.clone()));
+                tokens.push(Token::LiteralString(buffer.clone()));
                 buffer.clear();
             } else if c == '"' && buffer.ends_with('\\') {
                 buffer.pop();
@@ -200,7 +257,14 @@ pub fn tokenize(code: String) -> Vec<Token> {
 
                     tokens.push(Token::Delimiter(CloseTypeParams))
                 }
-                ',' => tokens.push(Token::Delimiter(Comma)),
+                ',' => {
+                    if !buffer.is_empty() {
+                        process_buffer(&mut tokens, &buffer);
+                        buffer.clear();
+                    }
+
+                    tokens.push(Token::Delimiter(Comma));
+                },
                 _ => {
                     buffer.push(c);
                 }
@@ -224,17 +288,22 @@ pub fn tokenize(code: String) -> Vec<Token> {
                 }
                 '>' => {
                     let mut is_type_arrow = false;
+                    let mut is_function_arrow = false;
 
                     if !buffer.is_empty() && buffer == "-" {
                         is_type_arrow = !is_type_arrow;
                         tokens.push(Token::Delimiter(TypeArrow));
+                        buffer.clear();
+                    } else if !buffer.is_empty() && buffer == "=" {
+                        is_function_arrow = !is_function_arrow;
+                        tokens.push(Token::Delimiter(FunctionArrow));
                         buffer.clear();
                     } else if !buffer.is_empty() {
                         process_buffer(&mut tokens, &buffer);
                         buffer.clear();
                     }
 
-                    if !is_type_arrow {
+                    if !is_type_arrow && !is_function_arrow {
                         tokens.push(Token::Delimiter(CloseTypeParams))
                     }
                 }
@@ -266,6 +335,36 @@ pub fn tokenize(code: String) -> Vec<Token> {
                     }
                     tokens.push(Token::Delimiter(CloseSequence));
                 }
+                '[' => {
+                    if !buffer.is_empty() {
+                        process_buffer(&mut tokens, &buffer);
+                        buffer.clear();
+                    }
+                    tokens.push(Token::Delimiter(OpenArray));
+                }
+                ']' => {
+                    if !buffer.is_empty() {
+                        process_buffer(&mut tokens, &buffer);
+                        buffer.clear();
+                    }
+                    tokens.push(Token::Delimiter(CloseArray));
+                }
+                '=' => {
+
+                    if !buffer.is_empty() {
+                        process_buffer(&mut tokens, &buffer);
+                        buffer.clear();
+                    }
+                    if check_next_char(&code, &counter) == '>' {
+                        buffer.push('=');
+                    } else if check_next_char(&code, &counter) == '=' {
+                        tokens.push(Token::Operator(Equals));
+                    } else if let Token::Operator(Equals) = tokens.last().unwrap() {
+
+                    } else {
+                        tokens.push(Token::Operator(Assign));
+                    }
+                }
                 '+' => {
                     if !buffer.is_empty() {
                         process_buffer(&mut tokens, &buffer);
@@ -273,12 +372,68 @@ pub fn tokenize(code: String) -> Vec<Token> {
                     }
                     tokens.push(Token::Operator(Add));
                 }
-                '=' => {
+                '-' => {
                     if !buffer.is_empty() {
                         process_buffer(&mut tokens, &buffer);
                         buffer.clear();
                     }
-                    tokens.push(Token::Operator(Assign));
+                    if check_next_char(&code, &counter) == '>' {
+                        buffer.push('-');
+                    } else {
+                        tokens.push(Token::Operator(Subtract));
+                    }
+                }
+                '*' => {
+                    if !buffer.is_empty() {
+                        process_buffer(&mut tokens, &buffer);
+                        buffer.clear();
+                    }
+                    tokens.push(Token::Operator(Multiply));
+                }
+                '/' => {
+                    if !buffer.is_empty() {
+                        process_buffer(&mut tokens, &buffer);
+                        buffer.clear();
+                    }
+                    tokens.push(Token::Operator(Divide));
+                }
+                '.' => {
+                    let mut first_check = false;
+                    let mut is_nan = false;
+
+                    match buffer.parse::<i64>() {
+                        Ok(_) => {
+                            first_check = !first_check;
+                        }
+                        _ => {}
+                    }
+
+                    if !check_next_char(&code, &counter).is_alphabetic() && first_check {
+                        is_nan = !is_nan;
+                    }
+
+                    if !buffer.is_empty() && !is_nan {
+                        process_buffer(&mut tokens, &buffer);
+                        buffer.clear();
+                    }
+
+                    if !is_nan {
+                        tokens.push(Token::Delimiter(ObjectSeparator));
+                    } else {
+                        buffer.push(c);
+                    }
+                }
+                ':' => {
+
+                    if !buffer.is_empty() {
+                        process_buffer(&mut tokens, &buffer);
+                        buffer.clear();
+                    }
+
+                    if check_next_char(&code, &counter) == ':' {
+                        buffer.push(':');
+                        buffer.push(':');
+                    }
                 }
                 ';' => {
                     if !buffer.is_empty() {
@@ -290,22 +445,40 @@ pub fn tokenize(code: String) -> Vec<Token> {
                 '"' => {
                     inside_string = !inside_string;
                 }
+                ',' => {
+                    if !buffer.is_empty() {
+                        process_buffer(&mut tokens, &buffer);
+                        buffer.clear();
+                    }
+                    tokens.push(Token::Delimiter(Comma));
+                }
                 _ => {
                     buffer.push(c);
                 }
             }
         }
+
+        counter += 1;
     }
 
     if !buffer.is_empty() {
         process_buffer(&mut tokens, &buffer);
     }
 
+    let mut counter = 0;
+
     for token in &tokens {
-        println!("Token: {:?}", token);
+        counter += 1;
+        println!("Token {}: {:?}", counter, token);
     }
 
+    // println!("{tokens:?}");
+
     todo!()
+}
+
+fn check_next_char(code: &str, counter: &usize) -> char {
+    code.chars().nth(*counter + 1).unwrap()
 }
 
 fn process_buffer(tokens: &mut Vec<Token>, buffer: &str) {
@@ -313,6 +486,24 @@ fn process_buffer(tokens: &mut Vec<Token>, buffer: &str) {
         // "()" => {
         //     tokens.push(Token::Types())
         // }
+        "::" => {
+            tokens.push(Token::Delimiter(ImportSeparator));
+        }
+        "import" => {
+            tokens.push(Token::Keyword(Import));
+        }
+        "std" => {
+            tokens.push(Token::Keyword(StandardLibrary));
+        }
+        "main" => {
+            tokens.push(Token::Keyword(Main));
+        }
+        "==" => {
+            tokens.push(Token::Operator(Equals));
+        }
+        "=>" => {
+            tokens.push(Token::Delimiter(FunctionArrow));
+        }
         "->" => {
             tokens.push(Token::Delimiter(TypeArrow));
         }
@@ -331,11 +522,23 @@ fn process_buffer(tokens: &mut Vec<Token>, buffer: &str) {
         "str" => {
             tokens.push(Token::Types(StringType));
         }
+        "bool" => {
+            tokens.push(Token::Types(Bool));
+        }
         "print" => {
             tokens.push(Token::Keyword(Print));
         }
         "+" => {
             tokens.push(Token::Operator(Add));
+        }
+        "-" => {
+            tokens.push(Token::Operator(Subtract));
+        }
+        "*" => {
+            tokens.push(Token::Operator(Multiply));
+        }
+        "/" => {
+            tokens.push(Token::Operator(Divide));
         }
         "=" => {
             tokens.push(Token::Operator(Assign));
