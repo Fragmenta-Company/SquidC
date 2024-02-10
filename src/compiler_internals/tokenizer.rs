@@ -14,6 +14,8 @@ pub enum Keywords {
     StandardLibrary,
 }
 
+use async_std::task::JoinHandle;
+use async_std::task;
 use Keywords::*;
 
 #[derive(Debug, PartialEq)]
@@ -168,38 +170,150 @@ pub fn test() {
 
     fn main() {
 
+        // Starts an immutable variable of type int (i64)
         let int z = 10;
 
+        // Creates a new thread and run a function directly from it
+        // A thread is a class given by the standard library
+        // That's why you need the given syntax "new thread()"
         let Result<ThreadHandle, ThreadError> myThread = new thread(add_ten(z));
 
+        // You can declare threads as this too:
+        // let myThread = new thread();
+        // And call a function like this:
+        // myThread.run(function());
+        // myThread.run(function2());
+        // You can run multiple functions and at the end be given a vector of handles : )
+
+        // Handles the thread function and sees if it's errored out while starting the thread
         let int output = match myThread.handle() {
             Ok(integer) => integer,
             Err(error) => {
-                print("An error has occured when spawning a thread: {error}");
+                print("An error has occured when spawning a thread: ${error}");
                 process.exit(1);
             }
         };
 
-        print("${output}");
+        // Outputs result number
+        print("Output: ${output}");
+
+        // Print test character
+        print(";");
 
     }
 
+    // Returns the given number + 10
     fn add_ten(int y) -> int {
 
+        // Declare a variable that is a calculation.
         let int x = y + 10;
 
+        // you don't need to type return since the variable is already at the end of the stack
         x
 
     }
 
     "#.to_string();
 
-    tokenize(code);
+    let code_without_comments = remove_comments(&code);
+
+    // println!("{code_without_comments}");
+
+    let chuncks = code_chunckenizer(code_without_comments);
+    let mut futures = Vec::new();
+
+    async fn task_tokenize(chunck:String) -> Vec<Token> {
+        tokenize(chunck)
+    }
+
+    for chunck in chuncks {
+        let future = task::spawn(task_tokenize(chunck));
+        futures.push(future);
+    }
+
+    let mut tokens = Vec::new();
+    let mut counter_chunks = 0;
+
+    for future in futures {
+        counter_chunks+=1;
+        async fn idk(future: JoinHandle<Vec<Token>>) -> Vec<Token> {
+            future.await
+        }
+
+        tokens.extend(task::block_on(idk(future)));
+
+    }
+
+    // println!("\n\n");
+    println!("Final tokens:\n");
+
+    let mut counter = 0;
+    for token in tokens {
+        println!("Token {counter}: {token:?}");
+        counter+=1;
+    }
+
+    println!("Chuncks of code: {counter_chunks}");
+
+}
+
+fn remove_comments(source_code: &str) -> String {
+    let mut code_without_comments = String::new();
+
+    for line in source_code.lines() {
+        // Check for single-line comments (//) and ignore the rest of the line
+        if let Some(index) = line.find("//") {
+            let line_without_comment = &line[0..index];
+            code_without_comments.push_str(line_without_comment.trim());
+        } else {
+            let line_without_leading_whitespace = line.trim_start();
+            code_without_comments.push_str(line_without_leading_whitespace);
+        }
+
+        // Add a newline character after each processed line
+        code_without_comments.push('\n');
+    }
+
+    println!("{}", code_without_comments);
+
+    code_without_comments
+}
+
+fn code_chunckenizer(code: String) -> Vec<String> {
+
+    let mut inside_string = false;
+    let mut chuncks = Vec::<String>::new();
+    let mut buffer = String::new();
+
+    for c in code.chars() {
+
+        match c {
+            '"' => {
+                buffer.push('"');
+                inside_string = !inside_string
+            }
+            ';' if !inside_string => {
+                buffer.push(';');
+                chuncks.push(buffer.to_string());
+                buffer.clear();
+            }
+            _ => buffer.push(c),
+        }
+
+    }
+
+    if !buffer.is_empty() {
+        chuncks.push(buffer.to_string());
+        buffer.clear();
+    }
+
+    chuncks
+
 }
 
 /// Tokenizer *WIP*
 pub fn tokenize(code: String) -> Vec<Token> {
-    println!("{}", code);
+    // println!("{}", code);
 
     let mut tokens: Vec<Token> = Vec::new();
 
@@ -211,17 +325,46 @@ pub fn tokenize(code: String) -> Vec<Token> {
 
     let mut counter = 0;
 
-    for c in code.chars() {
+    let mut chars = code.chars().peekable();
+
+    while let Some(c) = chars.next() {
         if inside_string {
-            if c == '"' && !buffer.ends_with('\\') {
-                inside_string = !inside_string;
-                tokens.push(Token::LiteralString(buffer.clone()));
-                buffer.clear();
-            } else if c == '"' && buffer.ends_with('\\') {
-                buffer.pop();
-                buffer.push('"');
-            } else {
-                buffer.push(c);
+            match c {
+                '"' if !buffer.ends_with('\\') => {
+                    inside_string = !inside_string;
+                    tokens.push(Token::LiteralString(buffer.clone()));
+                    // println!("{buffer}");
+                    buffer.clear();
+                }
+                '"' if buffer.ends_with('\\') => {
+                    buffer.pop();
+                    buffer.push('"');
+                }
+                '\\' => {
+                    let next_char = check_next_char(&code, &counter);
+
+                    if buffer.ends_with('\\') {
+                        buffer.pop();
+                        buffer.push('\\');
+                    } else {
+                        if next_char == '\\' {
+                            buffer.push('\\');
+                        } else {
+                            match next_char {
+                                'n' => buffer.push('\n'),
+                                't' => buffer.push('\t'),
+                                _ => {}
+                            }
+                            chars.next();
+                            counter+=1;
+                        }
+                    }
+
+                }
+                '\n' | '\t' => {
+
+                }
+                _ => buffer.push(c),
             }
         } else if inside_type_params {
             if c == '>' {
@@ -469,12 +612,12 @@ pub fn tokenize(code: String) -> Vec<Token> {
 
     for token in &tokens {
         counter += 1;
-        println!("Token {}: {:?}", counter, token);
+        // println!("Token {}: {:?}", counter, token);
     }
 
     // println!("{tokens:?}");
 
-    todo!()
+    tokens
 }
 
 fn check_next_char(code: &str, counter: &usize) -> char {
