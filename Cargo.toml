@@ -19,3 +19,4 @@ minreq = { version = "2.11", features = ["json-using-serde", "https"] }
 serde_json = { version = "1.0" }
 async-std = { version = "1.12" }
 num_cpus = { version = "1.16" }
+sqlx = { version = "0.7", features = ["sqlite"] }
