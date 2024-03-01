@@ -1,21 +1,25 @@
+use async_std::task::JoinHandle;
+use async_std::task;
+
 #[derive(Debug, PartialEq)]
 pub enum Keywords {
     Let,
     Const,
     Print,
+    PrintLine,
     Loop,
     While,
     For,
     Function,
+    Type,
     If,
+    Else,
     Main,
     New,
     Import,
     StandardLibrary,
 }
 
-use async_std::task::JoinHandle;
-use async_std::task;
 use Keywords::*;
 
 #[derive(Debug, PartialEq)]
@@ -69,20 +73,9 @@ pub enum Types {
     ///
     /// Array of unsigned integers
     Array,
-    /// Object type ({})
-    ///
-    /// Example:
-    ///
-    /// let int x = 20;
-    ///
-    /// let obj object = { StatusCode: 10; Message: "Hello, World!"; RandomArray: x }
-    Object,
 
-    Unit,
+    Null,
 
-    ThreadHandle,
-
-    TaskHandle,
 }
 
 use Types::*;
@@ -122,6 +115,14 @@ pub enum Delimiter {
     ObjectSeparator,
 
     ImportSeparator,
+
+    OpenInterpolation,
+
+    CloseInterpolation,
+
+    OpenString,
+
+    CloseString,
 }
 
 use Delimiter::*;
@@ -141,13 +142,16 @@ pub enum Token {
 
 pub fn test() {
     // let code = r#"
-    // fn main() -> Result<(), str> {
+    //
+    // type fn mainResult() -> { Ok(null), { Err(str) ErrCode(uint) } }
+    //
+    // fn main() -> mainResult {
     //     let [int] x = [2, 3, 4, 2];
     //     let int y = 2;
     //     let [bool] z;
     //
     //     x.for_each((a) => {
-    //         print(a);
+    //         println(a);
     //
     //         let bool result = y == a;
     //
@@ -156,7 +160,9 @@ pub fn test() {
     //         }
     //     });
     //
-    //     print("Right combination: {}", z);
+    //     println("Right combination: ${z}");
+    //
+    //     Ok(null)
     //
     // }
     //
@@ -165,55 +171,14 @@ pub fn test() {
 
     let code = r#"
 
-    import std::{ thread, ThreadError, ThreadHandle };
-    import std::process;
+        fn main() {
 
-    fn main() {
+            println("Hello, World!");
 
-        // Starts an immutable variable of type int (i64)
-        let int z = 10;
+        }
 
-        // Creates a new thread and run a function directly from it
-        // A thread is a class given by the standard library
-        // That's why you need the given syntax "new thread()"
-        let Result<ThreadHandle, ThreadError> myThread = new thread(add_ten(z));
-
-        // You can declare threads as this too:
-        // let myThread = new thread();
-        // And call a function like this:
-        // myThread.run(function());
-        // myThread.run(function2());
-        // You can run multiple functions and at the end be given a vector of handles : )
-
-        // Handles the thread function and sees if it's errored out while starting the thread
-        let int output = match myThread.handle() {
-            Ok(integer) => integer,
-            Err(error) => {
-                print("An error has occured when spawning a thread: ${error}");
-                process.exit(1);
-            }
-        };
-
-        // Outputs result number
-        print("Output: ${output}");
-
-        // Print test character
-        print(";");
-
-    }
-
-    // Returns the given number + 10
-    fn add_ten(int y) -> int {
-
-        // Declare a variable that is a calculation.
-        let int x = y + 10;
-
-        // you don't need to type return since the variable is already at the end of the stack
-        x
-
-    }
-
-    "#.to_string();
+    "#
+        .to_string();
 
     let code_without_comments = remove_comments(&code);
 
@@ -319,26 +284,51 @@ pub fn tokenize(code: String) -> Vec<Token> {
 
     let mut buffer: String = String::new();
 
+    let mut interpolation_buffer = String::new();
+
     let mut inside_string = false;
 
-    let mut inside_type_params = false;
+    let mut inside_interpolation = false;
 
     let mut counter = 0;
 
     let mut chars = code.chars().peekable();
 
     while let Some(c) = chars.next() {
-        if inside_string {
+        if inside_interpolation {
+            match c {
+                '}' => {
+                    inside_interpolation = !inside_interpolation;
+                    tokens.push(Token::Identifier(interpolation_buffer.clone()));
+                    interpolation_buffer.clear();
+                    tokens.push(Token::Delimiter(CloseInterpolation));
+                }
+                _ => {
+                    interpolation_buffer.push(c);
+                }
+            }
+        }else if inside_string {
             match c {
                 '"' if !buffer.ends_with('\\') => {
                     inside_string = !inside_string;
-                    tokens.push(Token::LiteralString(buffer.clone()));
-                    // println!("{buffer}");
+                    tokens.push(Token::Delimiter(CloseString));
+                    if !buffer.is_empty() {
+                        tokens.push(Token::LiteralString(buffer.clone()));
+                        // println!("{buffer}");
+                    }
                     buffer.clear();
                 }
                 '"' if buffer.ends_with('\\') => {
                     buffer.pop();
                     buffer.push('"');
+                }
+                '$' if check_next_char(&code, &counter) == '{' && !buffer.ends_with('\\') => {
+                    tokens.push(Token::LiteralString(buffer.clone()));
+                    tokens.push(Token::Delimiter(OpenInterpolation));
+                    buffer.clear();
+                    chars.next();
+                    counter+=1;
+                    inside_interpolation = !inside_interpolation;
                 }
                 '\\' => {
                     let next_char = check_next_char(&code, &counter);
@@ -366,52 +356,6 @@ pub fn tokenize(code: String) -> Vec<Token> {
                 }
                 _ => buffer.push(c),
             }
-        } else if inside_type_params {
-            if c == '>' {
-                inside_type_params = !inside_type_params;
-            }
-
-            match c {
-                ' ' | '\n' | '\t' => {
-                    if !buffer.is_empty() {
-                        process_buffer(&mut tokens, &buffer);
-                        buffer.clear();
-                    }
-                }
-                '(' => {
-                    if !buffer.is_empty() {
-                        process_buffer(&mut tokens, &buffer);
-                        buffer.clear();
-                    }
-                    tokens.push(Token::Delimiter(OpenSequence));
-                }
-                ')' => {
-                    if !buffer.is_empty() {
-                        process_buffer(&mut tokens, &buffer);
-                        buffer.clear();
-                    }
-                    tokens.push(Token::Delimiter(CloseSequence));
-                }
-                '>' => {
-                    if !buffer.is_empty() {
-                        process_buffer(&mut tokens, &buffer);
-                        buffer.clear();
-                    }
-
-                    tokens.push(Token::Delimiter(CloseTypeParams))
-                }
-                ',' => {
-                    if !buffer.is_empty() {
-                        process_buffer(&mut tokens, &buffer);
-                        buffer.clear();
-                    }
-
-                    tokens.push(Token::Delimiter(Comma));
-                },
-                _ => {
-                    buffer.push(c);
-                }
-            }
         } else {
             match c {
                 ' ' | '\n' | '\t' => {
@@ -421,13 +365,11 @@ pub fn tokenize(code: String) -> Vec<Token> {
                     }
                 }
                 '<' => {
-                    inside_type_params = !inside_type_params;
-
                     if !buffer.is_empty() {
                         process_buffer(&mut tokens, &buffer);
                         buffer.clear();
                     }
-                    tokens.push(Token::Delimiter(OpenTypeParams))
+                    tokens.push(Token::Operator(LessThan))
                 }
                 '>' => {
                     let mut is_type_arrow = false;
@@ -447,7 +389,7 @@ pub fn tokenize(code: String) -> Vec<Token> {
                     }
 
                     if !is_type_arrow && !is_function_arrow {
-                        tokens.push(Token::Delimiter(CloseTypeParams))
+                        tokens.push(Token::Operator(GreaterThan))
                     }
                 }
                 '{' => {
@@ -586,6 +528,7 @@ pub fn tokenize(code: String) -> Vec<Token> {
                     tokens.push(Token::Delimiter(Semicolon));
                 }
                 '"' => {
+                    tokens.push(Token::Delimiter(OpenString));
                     inside_string = !inside_string;
                 }
                 ',' => {
@@ -626,9 +569,6 @@ fn check_next_char(code: &str, counter: &usize) -> char {
 
 fn process_buffer(tokens: &mut Vec<Token>, buffer: &str) {
     match buffer {
-        // "()" => {
-        //     tokens.push(Token::Types())
-        // }
         "::" => {
             tokens.push(Token::Delimiter(ImportSeparator));
         }
@@ -653,6 +593,9 @@ fn process_buffer(tokens: &mut Vec<Token>, buffer: &str) {
         "fn" => {
             tokens.push(Token::Keyword(Function));
         }
+        "type" => {
+            tokens.push(Token::Keyword(Type));
+        }
         "const" => {
             tokens.push(Token::Keyword(Const));
         }
@@ -662,6 +605,12 @@ fn process_buffer(tokens: &mut Vec<Token>, buffer: &str) {
         "int" => {
             tokens.push(Token::Types(Int));
         }
+        "float" => {
+            tokens.push(Token::Types(Float));
+        }
+        "null" => {
+            tokens.push(Token::Types(Null));
+        }
         "str" => {
             tokens.push(Token::Types(StringType));
         }
@@ -670,6 +619,27 @@ fn process_buffer(tokens: &mut Vec<Token>, buffer: &str) {
         }
         "print" => {
             tokens.push(Token::Keyword(Print));
+        }
+        "println" => {
+            tokens.push(Token::Keyword(PrintLine));
+        }
+        "new" => {
+            tokens.push(Token::Keyword(New));
+        }
+        "if" => {
+            tokens.push(Token::Keyword(If));
+        }
+        "else" => {
+            tokens.push(Token::Keyword(Else))
+        }
+        "loop" => {
+            tokens.push(Token::Keyword(Loop));
+        }
+        "while" => {
+            tokens.push(Token::Keyword(While));
+        }
+        "for" => {
+            tokens.push(Token::Keyword(For));
         }
         "+" => {
             tokens.push(Token::Operator(Add));
