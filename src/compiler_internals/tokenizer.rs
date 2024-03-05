@@ -1,5 +1,5 @@
-use async_std::task::JoinHandle;
 use async_std::task;
+use async_std::task::JoinHandle;
 
 #[derive(Debug, PartialEq)]
 pub enum Keywords {
@@ -46,7 +46,6 @@ use Operators::*;
 
 #[derive(Debug, PartialEq)]
 pub enum Types {
-
     /// Bool type (false | true)
     Bool,
     /// Integer type (i64)
@@ -75,7 +74,6 @@ pub enum Types {
     Array,
 
     Null,
-
 }
 
 use Types::*;
@@ -178,7 +176,7 @@ pub fn test() {
         }
 
     "#
-        .to_string();
+    .to_string();
 
     let code_without_comments = remove_comments(&code);
 
@@ -187,7 +185,7 @@ pub fn test() {
     let chuncks = code_chunckenizer(code_without_comments);
     let mut futures = Vec::new();
 
-    async fn task_tokenize(chunck:String) -> Vec<Token> {
+    async fn task_tokenize(chunck: String) -> Vec<Token> {
         tokenize(chunck)
     }
 
@@ -200,13 +198,12 @@ pub fn test() {
     let mut counter_chunks = 0;
 
     for future in futures {
-        counter_chunks+=1;
+        counter_chunks += 1;
         async fn idk(future: JoinHandle<Vec<Token>>) -> Vec<Token> {
             future.await
         }
 
         tokens.extend(task::block_on(idk(future)));
-
     }
 
     // println!("\n\n");
@@ -215,11 +212,10 @@ pub fn test() {
     let mut counter = 0;
     for token in tokens {
         println!("Token {counter}: {token:?}");
-        counter+=1;
+        counter += 1;
     }
 
     println!("Chuncks of code: {counter_chunks}");
-
 }
 
 fn remove_comments(source_code: &str) -> String {
@@ -245,13 +241,11 @@ fn remove_comments(source_code: &str) -> String {
 }
 
 fn code_chunckenizer(code: String) -> Vec<String> {
-
     let mut inside_string = false;
     let mut chuncks = Vec::<String>::new();
     let mut buffer = String::new();
 
     for c in code.chars() {
-
         match c {
             '"' => {
                 buffer.push('"');
@@ -264,7 +258,6 @@ fn code_chunckenizer(code: String) -> Vec<String> {
             }
             _ => buffer.push(c),
         }
-
     }
 
     if !buffer.is_empty() {
@@ -273,7 +266,6 @@ fn code_chunckenizer(code: String) -> Vec<String> {
     }
 
     chuncks
-
 }
 
 /// Tokenizer *WIP*
@@ -307,7 +299,7 @@ pub fn tokenize(code: String) -> Vec<Token> {
                     interpolation_buffer.push(c);
                 }
             }
-        }else if inside_string {
+        } else if inside_string {
             match c {
                 '"' if !buffer.ends_with('\\') => {
                     inside_string = !inside_string;
@@ -327,7 +319,7 @@ pub fn tokenize(code: String) -> Vec<Token> {
                     tokens.push(Token::Delimiter(OpenInterpolation));
                     buffer.clear();
                     chars.next();
-                    counter+=1;
+                    counter += 1;
                     inside_interpolation = !inside_interpolation;
                 }
                 '\\' => {
@@ -346,14 +338,11 @@ pub fn tokenize(code: String) -> Vec<Token> {
                                 _ => {}
                             }
                             chars.next();
-                            counter+=1;
+                            counter += 1;
                         }
                     }
-
                 }
-                '\n' | '\t' => {
-
-                }
+                '\n' | '\t' => {}
                 _ => buffer.push(c),
             }
         } else {
@@ -435,7 +424,6 @@ pub fn tokenize(code: String) -> Vec<Token> {
                     tokens.push(Token::Delimiter(CloseArray));
                 }
                 '=' => {
-
                     if !buffer.is_empty() {
                         process_buffer(&mut tokens, &buffer);
                         buffer.clear();
@@ -445,7 +433,6 @@ pub fn tokenize(code: String) -> Vec<Token> {
                     } else if check_next_char(&code, &counter) == '=' {
                         tokens.push(Token::Operator(Equals));
                     } else if let Token::Operator(Equals) = tokens.last().unwrap() {
-
                     } else {
                         tokens.push(Token::Operator(Assign));
                     }
@@ -509,7 +496,6 @@ pub fn tokenize(code: String) -> Vec<Token> {
                     }
                 }
                 ':' => {
-
                     if !buffer.is_empty() {
                         process_buffer(&mut tokens, &buffer);
                         buffer.clear();
@@ -629,9 +615,7 @@ fn process_buffer(tokens: &mut Vec<Token>, buffer: &str) {
         "if" => {
             tokens.push(Token::Keyword(If));
         }
-        "else" => {
-            tokens.push(Token::Keyword(Else))
-        }
+        "else" => tokens.push(Token::Keyword(Else)),
         "loop" => {
             tokens.push(Token::Keyword(Loop));
         }
