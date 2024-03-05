@@ -1,7 +1,7 @@
 use crate::argsdef::Args;
 use clap::Parser;
-use std::{process, thread};
 use std::sync::Arc;
+use std::{process, thread};
 
 mod argsdef;
 mod compiler_internals;
@@ -64,7 +64,6 @@ fn main() {
 }
 
 fn _unused() {
-
     // Assume we have an Arc
     let arc = Arc::new(String::from("Hello"));
 
@@ -73,7 +72,6 @@ fn _unused() {
 
     // Spawn a new thread
     let child = thread::spawn(move || {
-
         // Get a raw pointer to the data inside the Arc
         let ptr = Arc::into_raw(arc_clone);
 
@@ -90,7 +88,6 @@ fn _unused() {
         // Get a raw pointer to the data inside the Arc
         let ptr = Arc::into_raw(arc_clone2);
 
-
         // UNSAFE: Cast the raw pointer to a mutable reference and modify the String
         unsafe {
             let string_ref: &mut String = &mut *(ptr as *mut String);
@@ -103,7 +100,5 @@ fn _unused() {
 
     child2.join().unwrap();
 
-
     process::exit(0);
-
 }
